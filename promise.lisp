@@ -72,6 +72,9 @@
   (setf (promise-continuation promise) thunk)
   promise)
 
+(defmethod then ((not-promise t) thunk)
+  (funcall thunk not-promise))
+
 (defgeneric catch-exception (promise condition-type thunk))
 
 (defmethod catch-exception ((promise promise) condition-type thunk)
@@ -84,3 +87,5 @@
 	     (error-continuations promise)))
   promise)
 
+(defmethod catch-exception ((not-promise t) condition-type thunk)
+  nil)
