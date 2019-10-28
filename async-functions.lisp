@@ -7,7 +7,7 @@
      ,@body))
 
 (defmacro lambda-async (lambda-list &body body)
-  (let ((promise-type (cond ((eq lambda-list :deferred)
+  (let ((promise-type (cond ((eq lambda-list :delay)
 			     (setf lambda-list (pop body))
 			     'promise)
 			    (t 'immediate-promise))))
@@ -20,7 +20,7 @@
 					  (progn ,@body))))))))
 
 (defmacro defun-async (name lambda-list &body body)
-  (let ((promise-type (cond ((eq name :deferred)
+  (let ((promise-type (cond ((eq name :delay)
 			     (setf name lambda-list)
 			     (setf lambda-list (pop body))
 			     'promise)
