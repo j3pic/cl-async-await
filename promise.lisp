@@ -67,13 +67,26 @@
 (defgeneric then (promise thunk))
 
 (defmethod then ((promise promise) thunk)
-  (when (promise-resolved-p promise)
-    (apply thunk (promise-resolution promise)))
-  (setf (promise-continuation promise) thunk)
-  promise)
+  "Returns a new promise that will be forced when the first PROMISE's
+continuation is called. The new promise resolves to the value of THUNK,
+which will receive all the parameters of the continuation."
+  (let* ((continuation-params nil)
+	 (new-promise (make-instance 'promise :thunk (lambda (resolve)
+						       (funcall resolve (apply thunk continuation-params)))))
+	 (continuation (lambda (&rest values)
+			 (setf continuation-params values)
+			 (force new-promise))))
+    (setf (promise-continuation promise) continuation)
+    (when (promise-resolved-p promise)
+      (apply (promise-continuation promise)
+	     (promise-resolution promise)))
+    new-promise))
 
 (defmethod then ((not-promise t) thunk)
-  (funcall thunk not-promise))
+  (make-instance 'immediate-promise
+		 :thunk (lambda (resolve)
+			  (funcall resolve
+				   (funcall thunk not-promise)))))
 
 (defgeneric catch-exception (promise condition-type thunk))
 
