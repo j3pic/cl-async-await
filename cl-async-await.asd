@@ -5,4 +5,6 @@
     :description "An implementation of async/await for Common Lisp"
     :depends-on (:closer-mop)
     :components
-    ((:file "promise")))
+    ((:file "package")
+     (:file "utils" :depends-on ("package"))
+     (:file "promise" :depends-on ("package" "utils"))))
