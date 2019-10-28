@@ -7,4 +7,5 @@
     :components
     ((:file "package")
      (:file "utils" :depends-on ("package"))
+     (:file "async-functions" :depends-on ("package" "promise" "utils"))
      (:file "promise" :depends-on ("package" "utils"))))

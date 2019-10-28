@@ -7,23 +7,32 @@
      ,@body))
 
 (defmacro lambda-async (lambda-list &body body)
-  (with-declare-form declare-form body
-    `(lambda ,lambda-list
-       (make-instance 'promise
-		      :thunk (lambda (resolve)
-			       ,@declare-form
-			       (funcall resolve
-					(progn ,@body)))))))
+  (let ((promise-type (cond ((eq lambda-list :deferred)
+			     (setf lambda-list (pop body))
+			     'promise)
+			    (t 'immediate-promise))))
+    (with-declare-form declare-form body
+      `(lambda ,lambda-list
+	 (make-instance ',promise-type
+			:thunk (lambda (resolve)
+				 ,@declare-form
+				 (funcall resolve
+					  (progn ,@body))))))))
 
 (defmacro defun-async (name lambda-list &body body)
-  (with-declare-form declare-form body
-    `(defun ,name ,lambda-list
-       ,@declare-form
-       (make-instance 'promise
-		      :thunk (lambda (resolve)
-			       (funcall resolve
-					(block ,name
-					  ,@body)))))))
+  (let ((promise-type (cond ((eq name :deferred)
+			     (setf name lambda-list)
+			     (setf lambda-list (pop body))
+			     'promise)
+			    (t 'immediate-promise))))
+    (with-declare-form declare-form body
+      `(defun ,name ,lambda-list
+	 ,@declare-form
+	 (make-instance ',promise-type
+			:thunk (lambda (resolve)
+				 (funcall resolve
+					  (block ,name
+					    ,@body))))))))
 
 (defmacro await-let1 ((var promise) &body body)
   `(then ,promise
@@ -37,4 +46,16 @@
      ,@(if (cdr bindings)
 	   (list `(await-let* ,(cdr bindings) ,@body))
 	   body)))
-	  
+
+(defmacro async-handler-case (form &body cases)
+  "Behaves just like CL:HANDLER-CASE, except if the FORM evals to a CL-ASYNC-AWAIT:PROMISE,
+it will attach error handlers to the promise and then return it."
+  (let ((promise (gensym)))
+    `(handler-case
+	 (let ((,promise ,form))
+	   ,@(loop for (condition-type lambda-list . body) in cases
+		collect `(catch-exception ,promise ',condition-type
+					  (lambda ,lambda-list ,@body)))
+	   ,promise)
+       ,@cases)))
+	   

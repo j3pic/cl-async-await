@@ -21,12 +21,13 @@
 		:accessor promise-error)
    (thunk :type function
 	  :initarg :thunk
-	  :reader promise-thunk))
-  (:metaclass funcallable-standard-class))
+	  :reader promise-thunk)))
 
-(defgeneric execute-promise (promise))
+(defclass immediate-promise (promise) ())
 
-(defmethod execute-promise ((promise promise))
+(defgeneric force (promise))
+
+(defmethod force ((promise promise))
   (unless (or (promise-resolved-p promise)
 	      (promise-error promise))
     (handler-case
@@ -60,9 +61,8 @@
 	    'promise resolution-string continuation-string
 	    (length (error-continuations promise)))))
 
-(defmethod initialize-instance :after ((p promise) &key)
-  (set-funcallable-instance-function p (lambda ()
-					 (execute-promise p))))
+(defmethod initialize-instance :after ((p immediate-promise) &key)
+  (force p))
 
 (defgeneric then (promise thunk))
 
