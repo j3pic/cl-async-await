@@ -1,9 +1,11 @@
 (in-package :cl-async-await)
 
 (defclass promise ()
-  ((resolution :type t
-	       :initarg :resolved
+  ((resolution :type list
+	       :initarg :resolution
 	       :initform nil
+	       :documentation "The final values that the promise generated. 
+Only valid if the RESOLVEDP slot is non-nil."
 	       :accessor promise-resolution)
    (resolvedp :type boolean
 	      :initform nil
@@ -23,9 +25,12 @@
 	  :initarg :thunk
 	  :reader promise-thunk)))
 
-(defclass immediate-promise (promise) ())
+(defclass immediate-promise (promise) ()
+  (:documentation "A PROMISE that is FORCEd upon creation."))
 
-(defgeneric force (promise))
+(defgeneric force (promise)
+  (:documentation "Invokes the thunk attached to the PROMISE. The promise will then be
+either resolved or broken."))
 
 (defmethod force ((promise promise))
   (unless (or (promise-resolved-p promise)
@@ -64,12 +69,12 @@
 (defmethod initialize-instance :after ((p immediate-promise) &key)
   (force p))
 
-(defgeneric then (promise thunk))
+(defgeneric then (promise thunk)
+  (:documentation "Returns a new promise that will be forced when the first PROMISE's
+continuation is called. The new promise resolves to the value of THUNK,
+which will receive all the parameters of the continuation."))
 
 (defmethod then ((promise promise) thunk)
-  "Returns a new promise that will be forced when the first PROMISE's
-continuation is called. The new promise resolves to the value of THUNK,
-which will receive all the parameters of the continuation."
   (let* ((continuation-params nil)
 	 (new-promise (make-instance 'promise :thunk (lambda (resolve)
 						       (funcall resolve (apply thunk continuation-params)))))
