@@ -39,8 +39,9 @@ code will execute immediately in a new thread.
 	 (make-instance ',promise-type
 			:thunk (lambda (resolve)
 				 ,@declare-form
-				 (funcall resolve
-					  (progn ,@body))))))))
+				 (apply resolve
+					(multiple-value-list 
+					 (progn ,@body)))))))))
 
 (defmacro defun-async (name lambda-list &body body)
   "Just like LAMBDA-ASYNC, except it expands to a CL:DEFUN form instead of CL:LAMBDA."
@@ -58,14 +59,17 @@ code will execute immediately in a new thread.
 	 ,@declare-form
 	 (make-instance ',promise-type
 			:thunk (lambda (resolve)
-				 (funcall resolve
-					  (block ,name
-					    ,@body))))))))
+				 (apply resolve
+					(multiple-value-list
+					 (block ,name
+					   ,@body)))))))))
 
 (defmacro await-let1 ((var promise) &body body)
-  `(then ,promise
-	 (lambda (,var)
-	   ,@body)))
+  (alexandria:with-gensyms (ignored-values)
+    `(then ,promise
+	   (lambda (,var &rest ,ignored-values)
+	     (declare (ignore ,ignored-values))
+	     ,@body))))
 
 (defmacro await-let* (bindings &body body)
   "Sequentially bind variables to different promises."
