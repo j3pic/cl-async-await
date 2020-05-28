@@ -3,7 +3,7 @@
     :version "1"
     :license "AGPLv3"
     :description "An implementation of async/await for Common Lisp"
-    :depends-on (:closer-mop)
+    :depends-on (:closer-mop :bordeaux-threads)
     :components
     ((:file "package")
      (:file "utils" :depends-on ("package"))
