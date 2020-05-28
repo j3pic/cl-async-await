@@ -29,7 +29,7 @@ the :DELAY keyword, whose usage is shown for both DEFUN-ASYNC and
 LAMBDA-ASYNC below:
 
 ```
-(defun :delay function-name lambda-list &body body)
+(defun-async :delay function-name lambda-list &body body)
 (lambda-async :delay lambda-list &body body)
 ```
 
