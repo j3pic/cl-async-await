@@ -47,12 +47,18 @@
 	   ,@body)))
 
 (defmacro await-let* (bindings &body body)
+  "Sequentially bind variables to different promises."
   (unless bindings
     (error "AWAIT-LET* with null BINDINGS is disallowed."))
   `(await-let1 ,(car bindings)
      ,@(if (cdr bindings)
 	   (list `(await-let* ,(cdr bindings) ,@body))
 	   body)))
+
+(defmacro await-multiple-value-bind ((lambda-list promise) &body body)
+  "Bind the multiple values returned by the PROMISE to a lambda-list."
+  `(then ,promise
+	 (lambda ,lambda-list ,@body)))
 
 (defmacro async-handler-case (form &body cases)
   "Behaves just like CL:HANDLER-CASE, except if the FORM evals to a CL-ASYNC-AWAIT:PROMISE,
