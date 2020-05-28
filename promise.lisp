@@ -29,7 +29,7 @@ Only valid if the RESOLVEDP slot is non-nil."
   (:documentation "A PROMISE that is FORCEd upon creation."))
 
 (defclass parallel-promise (promise)
-  ((mutex :type lock)))
+  ((mutex :type lock :initform (make-lock "PARALLEL-PROMISE-MUTEX"))))
 
 (defgeneric force (promise)
   (:documentation "Invokes the thunk attached to the PROMISE. The promise will then be
