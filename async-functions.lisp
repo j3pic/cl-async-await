@@ -10,10 +10,10 @@
   (let ((promise-type (cond ((eq lambda-list :delay)
 			     (setf lambda-list (pop body))
 			     'promise)
-			    ((eq lambda-list :parallel)
+			    ((eq lambda-list :immediate)
 			     (setf lambda-list (pop body))
-			     'parallel-promise)
-			    (t 'immediate-promise))))
+			     'immediate-promise)
+			    (t 'parallel-promise))))
     (with-declare-form declare-form body
       `(lambda ,lambda-list
 	 (make-instance ',promise-type
@@ -27,11 +27,11 @@
 			     (setf name lambda-list)
 			     (setf lambda-list (pop body))
 			     'promise)
-			    ((eq name :parallel)
+			    ((eq name :immediate)
 			     (setf name lambda-list)
 			     (setf lambda-list (pop body))
-			     'parallel-promise)
-			    (t 'immediate-promise))))
+			     'immediate-promise)
+			    (t 'parallel-promise))))
     (with-declare-form declare-form body
       `(defun ,name ,lambda-list
 	 ,@declare-form
