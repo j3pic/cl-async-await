@@ -7,6 +7,26 @@
      ,@body))
 
 (defmacro lambda-async (lambda-list &body body)
+  "Usage:
+
+(lambda-async lambda-list &body body) or
+(lambda-async :kw lambda-list &body body)
+
+Expands to a CL:LAMBDA that returns a PROMISE when FUNCALLed.
+
+The PROMISE resolves to whatever the BODY returns.
+
+The :KW parameter, if provided, must be replaced with either :DELAY or
+:IMMEDIATE. If :DELAY is given, the lambda will return a PROMISE
+object which won't execute until its value is requested (ie, until it is
+FORCEd).
+
+If :IMMEDIATE is given, the BODY is executed synchronously, and an
+already-resolved promise will be returned.
+
+If no :KW argument is given, then a PARALLEL-PROMISE is created. Its
+code will execute immediately in a new thread.
+"
   (let ((promise-type (cond ((eq lambda-list :delay)
 			     (setf lambda-list (pop body))
 			     'promise)
@@ -23,6 +43,7 @@
 					  (progn ,@body))))))))
 
 (defmacro defun-async (name lambda-list &body body)
+  "Just like LAMBDA-ASYNC, except it expands to a CL:DEFUN form instead of CL:LAMBDA."
   (let ((promise-type (cond ((eq name :delay)
 			     (setf name lambda-list)
 			     (setf lambda-list (pop body))
@@ -55,7 +76,7 @@
 	   (list `(await-let* ,(cdr bindings) ,@body))
 	   body)))
 
-(defmacro await-multiple-value-bind ((lambda-list promise) &body body)
+(defmacro await-multiple-value-bind (lambda-list promise &body body)
   "Bind the multiple values returned by the PROMISE to a lambda-list."
   `(then ,promise
 	 (lambda ,lambda-list ,@body)))
