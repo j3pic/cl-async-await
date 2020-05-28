@@ -76,6 +76,11 @@ either resolved or broken."))
 (defmethod initialize-instance :after ((p immediate-promise) &key)
   (force p))
 
+(defmethod initialize-instance :after ((p parallel-promise) &key)
+  (make-thread (lambda ()
+		 (force p))
+	       :name "PARALLEL-PROMISE thread"))  
+
 (defgeneric then (promise thunk)
   (:documentation "Returns a new promise that will be forced when the first PROMISE's
 continuation is called. The new promise resolves to the value of THUNK,
