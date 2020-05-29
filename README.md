@@ -46,9 +46,8 @@ method is called.
 
 That error will then be signalled in the thread from which `AWAIT` is called, in
 a context where all the same restarts are defined as are defined in the `PROMISE`
-thread. If `INVOKE-RESTART` is called with one of the restarts defined in the
-`PROMISE` thread, that restart will be invoked in the `PROMISE` thread, and `AWAIT`
-will return that restart's value form. 
+thread. If `INVOKE-RESTART` is called with one of these restarts, that restart
+will be invoked in the `PROMISE` thread, and `AWAIT` will return that restart's value form. 
 
 If the stack frame for the call to `AWAIT` is unwound without invoking a restart,
 the `PROMISE` thread will invoke its CL:ABORT restart.
