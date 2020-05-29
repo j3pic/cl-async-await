@@ -42,9 +42,9 @@ Only valid if the RESOLVEDP slot is non-nil."
     (handler-bind ((error (lambda (exn)
 			    (send-message (promise-outbox p)
 					  `(:error ,exn
-						   :restarts ,(loop for r in (compute-restarts)
-								 collect `(:name ,(restart-name r)
-										 :report ,(format nil "~a" r)))))
+					    :restarts ,(loop for r in (compute-restarts)
+							  collect `(:name ,(restart-name r)
+								    :report ,(format nil "~a" r)))))
 			    (let ((restart-invocation (get-message (promise-inbox p))))
 			      (apply #'invoke-restart restart-invocation)))))
       (restart-case
