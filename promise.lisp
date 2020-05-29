@@ -81,6 +81,25 @@ on the same PROMISE will yield the same values.
 If an error occurred and AWAIT is called a second time, the restarts will not be available,
 since the PROMISE thread is expected to be dead as a result of invoking the ABORT restart."))
 
+(defun raise-error-with-restarts (promise err restarts)
+  (let ((p promise))
+    (eval `(let ((restart-invoked nil))
+	     (unwind-protect
+		  (restart-case (error ,err)
+		    ,@(loop for restart-description in restarts
+			 collect `(,(getf restart-description :name)
+				    (&rest restart-arguments)
+				    :report ,(getf restart-description :report)
+				    (setf restart-invoked t)
+				    (send-message ,(promise-inbox p)
+						  (cons ',(getf restart-description :name)
+							restart-arguments))
+				    (setf (promise-resolution ,p) nil)
+				    (await-internal ,p))))
+	       (unless restart-invoked
+		 (setf (promise-error ,p) ,err)
+		 (send-message (promise-inbox ,p) '(abort))))))))
+
 (defun await-internal (p)
   (let ((message (or (promise-resolution p)
 		     (setf (promise-resolution p)
@@ -89,28 +108,10 @@ since the PROMISE thread is expected to be dead as a result of invoking the ABOR
       (:values
        (apply #'values (cdr message)))
       (:error
-       (let ((err (getf message :error))
-	     (restarts (getf message :restarts)))
-	 (cond ((promise-error p)
-		(error (promise-error p)))
-	       (t
-		(eval `(let ((restart-invoked nil))
-			 (unwind-protect
-			      (restart-case (error ,err)
-				,@(loop for restart-description in restarts
-				     collect `(,(getf restart-description :name)
-						(&rest restart-arguments)
-						:report ,(getf restart-description :report)
-						(setf restart-invoked t)
-						(send-message ,(promise-inbox p)
-							      (cons ',(getf restart-description :name)
-								    restart-arguments))
-						(setf (promise-resolution ,p) nil)
-						(await-internal ,p))))
-			   (unless restart-invoked
-			     (format t "Restart not invoked; Sending ABORT message~%")
-			     (setf (promise-error ,p) ,err)
-			     (send-message (promise-inbox ,p) '(abort)))))))))))))
+       (cond ((promise-error p)
+	      (error (promise-error p)))
+	     (t (raise-error-with-restarts p (getf message :error)
+					   (getf message :restarts))))))))
 
 (defmethod await ((p promise))
   (with-lock-held ((slot-value p 'mutex))
