@@ -29,24 +29,24 @@ Only valid if the RESOLVEDP slot is non-nil."
 
 (defmethod print-object ((promise promise) stream)
   (let ((resolution-string (acond ((promise-error promise)
-				  (format nil " Promise broken due to error: ~a" it))
-				 ((promise-resolution promise)
-				  (format nil " ~a " it))
-				 (t " Not awaited"))))
+				   (format nil " Promise broken due to error: ~a" it))
+				  ((promise-resolution promise)
+				   (format nil " ~a " it))
+				  (t " Not awaited"))))
 				  
     (format stream "#<~s~a>"
 	    'promise resolution-string)))
 
 (defun make-promise-handler (p)
   (lambda ()
-    (handler-bind ((t (lambda (exn)
-			(send-message (promise-outbox p)
-				      `(:error ,exn
-					:restarts ,(loop for r in (compute-restarts)
-						      collect `(:name ,(restart-name r)
-								:report ,(format nil "~a" r)))))
-			(let ((restart-invocation (get-message (promise-inbox p))))
-			  (apply #'invoke-restart restart-invocation)))))
+    (handler-bind ((error (lambda (exn)
+			    (send-message (promise-outbox p)
+					  `(:error ,exn
+						   :restarts ,(loop for r in (compute-restarts)
+								 collect `(:name ,(restart-name r)
+										 :report ,(format nil "~a" r)))))
+			    (let ((restart-invocation (get-message (promise-inbox p))))
+			      (apply #'invoke-restart restart-invocation)))))
       (restart-case
 	  (let ((result
 		 (multiple-value-list (funcall (promise-thunk p)))))
@@ -63,11 +63,23 @@ Only valid if the RESOLVEDP slot is non-nil."
 			 
 
 (defgeneric await (promise)
-  (:documentation "Wait for a PROMISE to resolve to a value. If an error occurred while trying to fulfill
-the PROMISE, AWAIT will raise that error with the same restarts that were available in the PROMISE's thread.
-Invoking one of these restarts will send a message back to the PROMISE thread telling it to invoke the
-corresponding restart within the thread. If the stack is unwound without selecting a restart, then
-the thread will be aborted."))
+  (:documentation "Wait for a PROMISE to resolve to one or more values. If the promise
+succeeds, the values will be returned using CL:VALUES.
+
+If an error occurs in the PROMISE thread, that error will be signalled in the thread
+from which AWAIT is called, in a context where all the same restarts are defined
+as are defined in the PROMISE thread. If INVOKE-RESTART is called with one of the
+restarts defined in the PROMISE thread, that restart will be invoked in the PROMISE
+thread, and AWAIT will return that restart's value form. 
+
+If the stack frame for the call to AWAIT is unwound without invoking a restart,
+the PROMISE thread will invoke its CL:ABORT restart.
+
+Whether the PROMISE succeeds or fails, the result is memoized. Calling AWAIT a second time
+on the same PROMISE will yield the same values.
+
+If an error occurred and AWAIT is called a second time, the restarts will not be available,
+since the PROMISE thread is expected to be dead as a result of invoking the ABORT restart."))
 
 (defun await-internal (p)
   (let ((message (or (promise-resolution p)
@@ -105,10 +117,15 @@ the thread will be aborted."))
     (await-internal p)))
 
 (defmacro lambda-async (lambda-list &body body)
+  "Creates a closure that creates a PROMISE when FUNCALLed. The BODY
+will run in its own thread.
+
+See also: AWAIT"
   `(lambda ,lambda-list
      (make-instance 'promise :thunk (lambda ()
 				      ,@body))))
 
 (defmacro defun-async (name lambda-list &body body)
+  "Like LAMBDA-ASYNC but expands to a CL:DEFUN form instead of CL:LAMBDA."
   `(defun ,name ,lambda-list
      (make-instance 'promise :thunk (lambda () ,@body))))
