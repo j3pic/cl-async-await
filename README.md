@@ -41,7 +41,7 @@ Wait for a `PROMISE` to resolve to one or more values. If the promise
 succeeds, the values will be returned using `CL:VALUES`.
 
 If an error occurs in the `PROMISE` thread and is not handled within the
-promise, execution of the PROMISE thread is suspended until the `AWAIT`
+promise, execution of the `PROMISE` thread is suspended until the `AWAIT`
 method is called.
 
 That error will then be signalled in the thread from which `AWAIT` is called, in
@@ -50,7 +50,7 @@ thread. If `INVOKE-RESTART` is called with one of these restarts, that restart
 will be invoked in the `PROMISE` thread, and `AWAIT` will return that restart's value form. 
 
 If the stack frame for the call to `AWAIT` is unwound without invoking a restart,
-the `PROMISE` thread will invoke its CL:ABORT restart.
+the `PROMISE` thread will invoke its `CL:ABORT` restart.
 
 Whether the `PROMISE` succeeds or fails, the result is memoized. Calling `AWAIT` a second time
 on the same `PROMISE` will yield the same values.
