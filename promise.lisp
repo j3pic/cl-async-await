@@ -101,17 +101,17 @@ since the PROMISE thread is expected to be dead as a result of invoking the ABOR
 		 (send-message (promise-inbox ,p) '(abort))))))))
 
 (defun await-internal (p)
-  (let ((message (or (promise-resolution p)
-		     (setf (promise-resolution p)
-			   (get-message (promise-outbox p))))))
-    (ecase (car message)
-      (:values
-       (apply #'values (cdr message)))
-      (:error
-       (cond ((promise-error p)
-	      (error (promise-error p)))
-	     (t (raise-error-with-restarts p (getf message :error)
-					   (getf message :restarts))))))))
+  (aif (promise-error p)
+       (error it)
+       (let ((message (or (promise-resolution p)
+			  (setf (promise-resolution p)
+				(get-message (promise-outbox p))))))
+	 (ecase (car message)
+	   (:values
+	    (apply #'values (cdr message)))
+	   (:error
+	    (raise-error-with-restarts p (getf message :error)
+				       (getf message :restarts)))))))
 
 (defmethod await ((p promise))
   (with-lock-held ((slot-value p 'mutex))
