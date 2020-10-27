@@ -1,62 +1,42 @@
 # CL-ASYNC-AWAIT
 
 This library allows you to have async functions similar to those
-in JavaScript, only these async functions are implemented with
-threads instead of an event dispatching mechanism.
+in JavaScript.
 
-Cross-thread error handling is easy using `CL-ASYNC-AWAIT`, since
-the `AWAIT` operator propagates errors from the promise, and also
-propagates invoked restarts back to the promise.
-
-## Simple example
+Example:
 
 ```
-(defun-async my-async-reader (stream)
-  (read-byte stream))
+(defun-async :delay example-function (p1 p2)
+  (async-handler-case
+     (await-let* ((x p1)
+                  (y p2))
+       (/ x y))
+    (division-by-zero (db0) (format *error-output* "Caught error: ~a~%" db0))))
 
-(defvar *promise* (my-async-reader *some-stream*))
-(defvar *my-byte* (await *promise*))
-```
+(defun-async promise-value (n) n)
 
-## Usage
-
-
-```
-(lambda-async lambda-list &body body)
-```
-
-Creates a `CL:LAMBDA` function that creates a `PROMISE` when FUNCALLed.
+(defvar *p1* (example-function (promise-value 1) (promise-value 2)))
+(defvar *p2* (example-function (promise-value 1) (promise-value 0)))
 
 ```
-(defun-async name lambda-list &body body)
+
+Since Common Lisp is not a fully asynchronous language built around PROMISE objects,
+it is necessary for the programmer to decide when each PROMISE will be FORCEd.
+
+By default, DEFUN-ASYNC and LAMBDA-ASYNC will create IMMEDIATE-PROMISEs, which
+resolve as soon as they are created. Delayed promises can be created with
+the :DELAY keyword, whose usage is shown for both DEFUN-ASYNC and
+LAMBDA-ASYNC below:
+
+```
+(defun-async :delay function-name lambda-list &body body)
+(lambda-async :delay lambda-list &body body)
 ```
 
-Like `LAMBDA-ASYNC` but expands to a `CL:DEFUN` form instead of a `CL:LAMBDA` form.
+Delayed promises will execute if and only if the FORCE method is invoked on them:
 
 ```
-(await promise)
+(force promise)
 ```
 
-Wait for a `PROMISE` to resolve to one or more values. If the promise
-succeeds, the values will be returned using `CL:VALUES`.
-
-If an error occurs in the `PROMISE` thread and is not handled within the
-promise, execution of the PROMISE thread is suspended until the `AWAIT`
-method is called.
-
-That error will then be signalled in the thread from which `AWAIT` is called, in
-a context where all the same restarts are defined as are defined in the `PROMISE`
-thread. If `INVOKE-RESTART` is called with one of the restarts defined in the
-`PROMISE` thread, that restart will be invoked in the `PROMISE` thread, and `AWAIT`
-will return that restart's value form. 
-
-If the stack frame for the call to `AWAIT` is unwound without invoking a restart,
-the `PROMISE` thread will invoke its CL:ABORT restart.
-
-Whether the `PROMISE` succeeds or fails, the result is memoized. Calling `AWAIT` a second time
-on the same `PROMISE` will yield the same values.
-
-If an error occurred and `AWAIT` is called a second time, the same error will be signalled, but
-the restarts will not be available, since the `PROMISE` thread is expected to be dead as a result
-of invoking the `ABORT` restart.
 
