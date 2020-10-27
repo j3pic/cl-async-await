@@ -10,13 +10,6 @@
 (defmacro aif (cond if-true &optional if-false)
   `(if-let it ,cond ,if-true ,if-false))
 
-(defmacro acond (&body clauses)
-  (if (null clauses)
-      nil
-      `(aif ,(caar clauses)
-	    (progn ,@(cdar clauses))
-	    (acond ,@(cdr clauses)))))
-
 (defun (setf assoc) (new-value key alist)
   (aif (assoc key alist)
        (progn

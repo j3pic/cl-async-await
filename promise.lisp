@@ -7,126 +7,123 @@
 	       :documentation "The final values that the promise generated. 
 Only valid if the RESOLVEDP slot is non-nil."
 	       :accessor promise-resolution)
-   (mutex :type lock
-	  :initform (make-lock "PROMISE-MUTEX"))
+   (resolvedp :type boolean
+	      :initform nil
+	      :accessor promise-resolved-p)
+   (continuation :type function
+		 :initarg :continuation
+		 :initform #'values
+		 :accessor promise-continuation)
+   (error-continuations :type list
+			:initform nil
+			:accessor error-continuations)
    (error :type (or condition null)
-	  :initarg :error
-	  :initform nil
-	  :accessor promise-error)
-   (thread :type (or thread null)
-	   :initarg :thread
-	   :initform nil
-	   :accessor promise-thread)
-   (outbox :type simple-actors/ipc::simple-process-mailbox
-	   :initform (simple-actors/ipc:make-mailbox)
-	   :reader promise-outbox)
-   (inbox :type simple-actors/ipc::simple-process-mailbox
-	  :initform (simple-actors/ipc:make-mailbox)
-	  :reader promise-inbox)
+		:initarg :error
+		:initform nil
+		:accessor promise-error)
    (thunk :type function
 	  :initarg :thunk
 	  :reader promise-thunk)))
 
+(defclass immediate-promise (promise) ()
+  (:documentation "A PROMISE that is FORCEd upon creation."))
+
+(defclass parallel-promise (promise)
+  ((mutex :type lock :initform (make-lock "PARALLEL-PROMISE-MUTEX"))))
+
+(defgeneric force (promise)
+  (:documentation "Invokes the thunk attached to the PROMISE. The promise will then be
+either resolved or broken."))
+
+(defmethod force ((promise promise))
+  (unless (or (promise-resolved-p promise)
+	      (promise-error promise))
+    (handler-case
+	(funcall (promise-thunk promise)
+		 (lambda (&rest values)
+		   (setf (promise-resolution promise)
+			 values)
+		   (setf (promise-resolved-p promise) t)))
+      (t (exn)
+	(loop for (type . thunk) in (error-continuations promise)
+	   when (typep exn type)
+	   return (funcall thunk exn))
+	(setf (promise-error promise) exn)
+	(setf (promise-resolution promise) nil)))
+    (if (promise-resolved-p promise)
+	(apply (promise-continuation promise)
+	       (promise-resolution promise))))
+  promise)
+
+(defmethod force ((promise parallel-promise))
+  (with-lock-held ((slot-value promise 'mutex))
+    (call-next-method)))
+
 (defmethod print-object ((promise promise) stream)
-  (let ((resolution-string (acond ((promise-error promise)
-				   (format nil " Promise broken due to error: ~a" it))
-				  ((promise-resolution promise)
-				   (format nil " ~a " it))
-				  (t " Not awaited"))))
+  (let ((resolution-string (cond ((promise-resolved-p promise)
+				  (format nil " Resolved to: ~s" (promise-resolution promise)))
+				 ((promise-error promise)
+				  (format nil " Promise broken due to error: ~a" (promise-error promise)))
+				 (t " Pending")))
+	(continuation-string (aif (promise-continuation promise)
+				  (format nil " Continuation: ~s" it)
+				  "")))
 				  
-    (format stream "#<~s~a>"
-	    'promise resolution-string)))
+    (format stream "#<~s~a;~a; ~a error continuations>"
+	    'promise resolution-string continuation-string
+	    (length (error-continuations promise)))))
 
-(defun make-promise-handler (p)
-  (lambda ()
-    (handler-bind ((error (lambda (exn)
-			    (send-message (promise-outbox p)
-					  `(:error ,exn
-					    :restarts ,(loop for r in (compute-restarts)
-							  collect `(:name ,(restart-name r)
-								    :report ,(format nil "~a" r)))))
-			    (let ((restart-invocation (get-message (promise-inbox p))))
-			      (apply #'invoke-restart restart-invocation)))))
-      (restart-case
-	  (let ((result
-		 (multiple-value-list (funcall (promise-thunk p)))))
-	    (send-message (promise-outbox p)
-			  `(:values ,@result)))
-	(abort ()
-	  :report "Terminate the promise's thread."
-	  (send-message (promise-outbox p) '(:values)))))))
+(defmethod initialize-instance :after ((p immediate-promise) &key)
+  (force p))
 
-(defmethod initialize-instance :after ((p promise) &key)
-  (setf (promise-thread p)
-	(make-thread (make-promise-handler p)
-		     :name "PROMISE-THREAD")))
-			 
+(defmethod initialize-instance :after ((p parallel-promise) &key)
+  (make-thread (lambda ()
+		 (force p))
+	       :name "PARALLEL-PROMISE thread"))  
 
-(defgeneric await (promise)
-  (:documentation "Wait for a PROMISE to resolve to one or more values. If the promise
-succeeds, the values will be returned using CL:VALUES.
+(defgeneric then (promise thunk)
+  (:documentation "Returns a new promise that will be forced when the first PROMISE's
+continuation is called. The new promise resolves to the value of THUNK,
+which will receive all the parameters of the continuation."))
 
-If an error occurs in the PROMISE thread, that error will be signalled in the thread
-from which AWAIT is called, in a context where all the same restarts are defined
-as are defined in the PROMISE thread. If INVOKE-RESTART is called with one of the
-restarts defined in the PROMISE thread, that restart will be invoked in the PROMISE
-thread, and AWAIT will return that restart's value form. 
+(defmethod then ((promise promise) thunk)
+  (let* ((continuation-params nil)
+	 (new-promise (make-instance 'promise :thunk (lambda (resolve)
+						       (funcall resolve (apply thunk continuation-params)))))
+	 (continuation (lambda (&rest values)
+			 (setf continuation-params values)
+			 (force new-promise))))
+    (setf (promise-continuation promise) continuation)
+    (when (promise-resolved-p promise)
+      (apply (promise-continuation promise)
+	     (promise-resolution promise)))
+    new-promise))
 
-If the stack frame for the call to AWAIT is unwound without invoking a restart,
-the PROMISE thread will invoke its CL:ABORT restart.
+(defmethod then ((promise parallel-promise) thunk)
+  (with-lock-held ((slot-value promise 'mutex))
+    (call-next-method)))
 
-Whether the PROMISE succeeds or fails, the result is memoized. Calling AWAIT a second time
-on the same PROMISE will yield the same values.
+(defmethod then ((not-promise t) thunk)
+  (make-instance 'immediate-promise
+		 :thunk (lambda (resolve)
+			  (funcall resolve
+				   (funcall thunk not-promise)))))
 
-If an error occurred and AWAIT is called a second time, the restarts will not be available,
-since the PROMISE thread is expected to be dead as a result of invoking the ABORT restart."))
+(defgeneric catch-exception (promise condition-type thunk))
 
-(defun raise-error-with-restarts (promise err restarts)
-  (let ((p promise))
-    (eval `(let ((restart-invoked nil))
-	     (unwind-protect
-		  (restart-case (error ,err)
-		    ,@(loop for restart-description in restarts
-			 collect `(,(getf restart-description :name)
-				    (&rest restart-arguments)
-				    :report ,(getf restart-description :report)
-				    (setf restart-invoked t)
-				    (send-message ,(promise-inbox p)
-						  (cons ',(getf restart-description :name)
-							restart-arguments))
-				    (setf (promise-resolution ,p) nil)
-				    (await-internal ,p))))
-	       (unless restart-invoked
-		 (setf (promise-error ,p) ,err)
-		 (send-message (promise-inbox ,p) '(abort))))))))
+(defmethod catch-exception ((promise promise) condition-type thunk)
+  (when (and (promise-error promise)
+	     (typep (promise-error promise) condition-type))
+    (funcall thunk (promise-error promise)))
+  (aif (assoc condition-type (error-continuations promise))
+       (setf (cdr it) thunk)
+       (push (cons condition-type thunk)
+	     (error-continuations promise)))
+  promise)
 
-(defun await-internal (p)
-  (aif (promise-error p)
-       (error it)
-       (let ((message (or (promise-resolution p)
-			  (setf (promise-resolution p)
-				(get-message (promise-outbox p))))))
-	 (ecase (car message)
-	   (:values
-	    (apply #'values (cdr message)))
-	   (:error
-	    (raise-error-with-restarts p (getf message :error)
-				       (getf message :restarts)))))))
+(defmethod catch-exception ((promise parallel-promise) condition-type thunk)
+  (with-lock-held ((slot-value promise 'mutex))
+    (call-next-method)))
 
-(defmethod await ((p promise))
-  (with-lock-held ((slot-value p 'mutex))
-    (await-internal p)))
-
-(defmacro lambda-async (lambda-list &body body)
-  "Creates a closure that creates a PROMISE when FUNCALLed. The BODY
-will run in its own thread.
-
-See also: AWAIT"
-  `(lambda ,lambda-list
-     (make-instance 'promise :thunk (lambda ()
-				      ,@body))))
-
-(defmacro defun-async (name lambda-list &body body)
-  "Like LAMBDA-ASYNC but expands to a CL:DEFUN form instead of CL:LAMBDA."
-  `(defun ,name ,lambda-list
-     (make-instance 'promise :thunk (lambda () ,@body))))
+(defmethod catch-exception ((not-promise t) condition-type thunk)
+  nil)
