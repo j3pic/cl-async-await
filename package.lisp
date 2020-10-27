@@ -1,3 +1,3 @@
 (cl:defpackage :cl-async-await
-  (:use :closer-common-lisp :bordeaux-threads :simple-actors/ipc)
+  (:use :closer-common-lisp :bordeaux-threads)
   (:shadow assoc))
