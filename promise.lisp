@@ -10,9 +10,9 @@ Only valid if the RESOLVEDP slot is non-nil."
    (mutex :type lock
 	  :initform (make-lock "PROMISE-MUTEX"))
    (error :type (or condition null)
-	  :initarg :error
-	  :initform nil
-	  :accessor promise-error)
+		:initarg :error
+		:initform nil
+		:accessor promise-error)
    (thread :type thread
 	   :initarg :thread
 	   :initform nil
