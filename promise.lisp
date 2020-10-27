@@ -13,7 +13,7 @@ Only valid if the RESOLVEDP slot is non-nil."
 	  :initarg :error
 	  :initform nil
 	  :accessor promise-error)
-   (thread :type (or thread null)
+   (thread :type thread
 	   :initarg :thread
 	   :initform nil
 	   :accessor promise-thread)
